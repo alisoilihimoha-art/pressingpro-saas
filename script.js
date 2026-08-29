@@ -4485,6 +4485,13 @@ function renderParametres() {
       ge('licInfoBox').innerHTML = '<span style="color:var(--err)">Aucun compte détecté</span>';
     }
   }
+  if (ge('btnLogoutAccount')) {
+    ge('btnLogoutAccount').onclick = function () {
+      if (confirm('Se déconnecter de ce compte sur cet appareil ? Vos données restent en sécurité sur le serveur, vous pourrez vous reconnecter avec votre email et votre mot de passe.')) {
+        if (window.PPSync) PPSync.logout();
+      }
+    };
+  }
   ge('formCommerce').onsubmit = function (e) {
     e.preventDefault();
     var d2 = getData();
