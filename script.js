@@ -130,7 +130,7 @@ function defaultData() {
     employes: [],          // comptes employés : {id, nom, pin, role:'admin'|'employe', pages:[...]}
     offres: [],            // offres marketing envoyées : {id, clientId, clientNom, tel, type, valeur, message, date, statut}
     settings: {
-      name: 'Mon Pressing', adresse: '', tel: '', devise: 'FCFA', tva: 0, indicatif: '225',
+      name: 'Mon Pressing', adresse: '', tel: '', devise: 'FCFA', tva: 0, indicatif: '225', pays: 'CI',
       pin: '', relanceAuto: true, slogan: '', logo: '',
       emplacementActif: true, delaiStandard: 2, expressMult: 2,
       categories: ['Vêtements', 'Traditionnel & Bazin', 'Linge de maison', 'Chaussures', 'Enfant'],
@@ -354,6 +354,10 @@ function wizardFinish() {
   d.settings.name = nom;
   d.settings.adresse = ge('wizAdresse').value.trim();
   d.settings.tel = ge('wizTel').value.trim();
+  if (ge('wizPays')) {
+    var pw = paysDeCode(ge('wizPays').value);
+    if (pw) { d.settings.pays = pw.code; d.settings.indicatif = pw.ind; }
+  }
   d.settings.devise = ge('wizDevise').value;
   d.settings.tva = numVal('wizTva', 20);
   d.settings.delaiStandard = parseInt(ge('wizDelai').value) || 2;
@@ -1874,31 +1878,125 @@ function changeTicketStatut(id, newStatut) {
    - « trunk » = vrai si le numéro local s'écrit avec un 0 devant
                  qu'il faut RETIRER pour l'international.
    ══════════════════════════════════════════════════════════════ */
-var PAYS_TEL = [
-  { ind: '225', nom: "Côte d'Ivoire", trunk: false, nsn: 10 },
-  { ind: '221', nom: 'Sénégal', trunk: false, nsn: 9 },
-  { ind: '223', nom: 'Mali', trunk: false, nsn: 8 },
-  { ind: '224', nom: 'Guinée', trunk: false, nsn: 9 },
-  { ind: '226', nom: 'Burkina Faso', trunk: false, nsn: 8 },
-  { ind: '227', nom: 'Niger', trunk: false, nsn: 8 },
-  { ind: '228', nom: 'Togo', trunk: false, nsn: 8 },
-  { ind: '229', nom: 'Bénin', trunk: false, nsn: 10 },
-  { ind: '237', nom: 'Cameroun', trunk: false, nsn: 9 },
-  { ind: '241', nom: 'Gabon', trunk: false, nsn: 8 },
-  { ind: '242', nom: 'Congo', trunk: false, nsn: 9 },
-  { ind: '243', nom: 'RD Congo', trunk: true, nsn: 9 },
-  { ind: '269', nom: 'Comores', trunk: false, nsn: 7 },
-  { ind: '261', nom: 'Madagascar', trunk: true, nsn: 9 },
-  { ind: '230', nom: 'Maurice', trunk: false, nsn: 8 },
-  { ind: '212', nom: 'Maroc', trunk: true, nsn: 9 },
-  { ind: '213', nom: 'Algérie', trunk: true, nsn: 9 },
-  { ind: '216', nom: 'Tunisie', trunk: false, nsn: 8 },
-  { ind: '33', nom: 'France', trunk: true, nsn: 9 },
-  { ind: '32', nom: 'Belgique', trunk: true, nsn: 0 },
-  { ind: '41', nom: 'Suisse', trunk: true, nsn: 9 },
-  { ind: '262', nom: 'La Réunion / Mayotte', trunk: true, nsn: 9 },
-  { ind: '1', nom: 'Canada / États-Unis', trunk: false, nsn: 10 }
+var PAYS_REF = [
+  /* ── Afrique de l'Ouest ─────────────────────────────────────── */
+  { code: 'BJ', nom: 'Bénin',              flag: '🇧🇯', ind: '229', dev: 'FCFA', trunk: false, nsn: 10, zone: "Afrique de l'Ouest" },
+  { code: 'BF', nom: 'Burkina Faso',       flag: '🇧🇫', ind: '226', dev: 'FCFA', trunk: false, nsn: 8,  zone: "Afrique de l'Ouest" },
+  { code: 'CI', nom: "Côte d'Ivoire",      flag: '🇨🇮', ind: '225', dev: 'FCFA', trunk: false, nsn: 10, zone: "Afrique de l'Ouest" },
+  { code: 'GN', nom: 'Guinée',             flag: '🇬🇳', ind: '224', dev: 'GNF',  trunk: false, nsn: 9,  zone: "Afrique de l'Ouest" },
+  { code: 'ML', nom: 'Mali',               flag: '🇲🇱', ind: '223', dev: 'FCFA', trunk: false, nsn: 8,  zone: "Afrique de l'Ouest" },
+  { code: 'MR', nom: 'Mauritanie',         flag: '🇲🇷', ind: '222', dev: 'MRU',  trunk: false, nsn: 8,  zone: "Afrique de l'Ouest" },
+  { code: 'NE', nom: 'Niger',              flag: '🇳🇪', ind: '227', dev: 'FCFA', trunk: false, nsn: 8,  zone: "Afrique de l'Ouest" },
+  { code: 'SN', nom: 'Sénégal',            flag: '🇸🇳', ind: '221', dev: 'FCFA', trunk: false, nsn: 9,  zone: "Afrique de l'Ouest" },
+  { code: 'TG', nom: 'Togo',               flag: '🇹🇬', ind: '228', dev: 'FCFA', trunk: false, nsn: 8,  zone: "Afrique de l'Ouest" },
+  /* ── Afrique centrale ───────────────────────────────────────── */
+  { code: 'BI', nom: 'Burundi',            flag: '🇧🇮', ind: '257', dev: 'FBu',  trunk: false, nsn: 8,  zone: 'Afrique centrale' },
+  { code: 'CM', nom: 'Cameroun',           flag: '🇨🇲', ind: '237', dev: 'FCFA', trunk: false, nsn: 9,  zone: 'Afrique centrale' },
+  { code: 'CF', nom: 'Centrafrique',       flag: '🇨🇫', ind: '236', dev: 'FCFA', trunk: false, nsn: 8,  zone: 'Afrique centrale' },
+  { code: 'CG', nom: 'Congo-Brazzaville',  flag: '🇨🇬', ind: '242', dev: 'FCFA', trunk: false, nsn: 9,  zone: 'Afrique centrale' },
+  { code: 'CD', nom: 'RD Congo',           flag: '🇨🇩', ind: '243', dev: 'FC',   trunk: true,  nsn: 9,  zone: 'Afrique centrale' },
+  { code: 'GA', nom: 'Gabon',              flag: '🇬🇦', ind: '241', dev: 'FCFA', trunk: false, nsn: 8,  zone: 'Afrique centrale' },
+  { code: 'GQ', nom: 'Guinée équatoriale', flag: '🇬🇶', ind: '240', dev: 'FCFA', trunk: false, nsn: 9,  zone: 'Afrique centrale' },
+  { code: 'RW', nom: 'Rwanda',             flag: '🇷🇼', ind: '250', dev: 'RWF',  trunk: false, nsn: 9,  zone: 'Afrique centrale' },
+  { code: 'TD', nom: 'Tchad',              flag: '🇹🇩', ind: '235', dev: 'FCFA', trunk: false, nsn: 8,  zone: 'Afrique centrale' },
+  /* ── Océan Indien ───────────────────────────────────────────── */
+  { code: 'KM', nom: 'Comores',            flag: '🇰🇲', ind: '269', dev: 'KMF',  trunk: false, nsn: 7,  zone: 'Océan Indien' },
+  { code: 'DJ', nom: 'Djibouti',           flag: '🇩🇯', ind: '253', dev: 'FDJ',  trunk: false, nsn: 8,  zone: 'Océan Indien' },
+  { code: 'MG', nom: 'Madagascar',         flag: '🇲🇬', ind: '261', dev: 'Ar',   trunk: true,  nsn: 9,  zone: 'Océan Indien' },
+  { code: 'MU', nom: 'Maurice',            flag: '🇲🇺', ind: '230', dev: 'Rs',   trunk: false, nsn: 8,  zone: 'Océan Indien' },
+  { code: 'RE', nom: 'La Réunion / Mayotte', flag: '🇷🇪', ind: '262', dev: '€', trunk: true,  nsn: 9,  zone: 'Océan Indien' },
+  { code: 'SC', nom: 'Seychelles',         flag: '🇸🇨', ind: '248', dev: 'SCR',  trunk: false, nsn: 7,  zone: 'Océan Indien' },
+  /* ── Maghreb ────────────────────────────────────────────────── */
+  { code: 'DZ', nom: 'Algérie',            flag: '🇩🇿', ind: '213', dev: 'DA',   trunk: true,  nsn: 9,  zone: 'Maghreb' },
+  { code: 'MA', nom: 'Maroc',              flag: '🇲🇦', ind: '212', dev: 'DH',   trunk: true,  nsn: 9,  zone: 'Maghreb' },
+  { code: 'TN', nom: 'Tunisie',            flag: '🇹🇳', ind: '216', dev: 'DT',   trunk: false, nsn: 8,  zone: 'Maghreb' },
+  /* ── Europe francophone ─────────────────────────────────────── */
+  { code: 'BE', nom: 'Belgique',           flag: '🇧🇪', ind: '32',  dev: '€',    trunk: true,  nsn: 0,  zone: 'Europe francophone' },
+  { code: 'FR', nom: 'France',             flag: '🇫🇷', ind: '33',  dev: '€',    trunk: true,  nsn: 9,  zone: 'Europe francophone' },
+  { code: 'LU', nom: 'Luxembourg',         flag: '🇱🇺', ind: '352', dev: '€',    trunk: false, nsn: 0,  zone: 'Europe francophone' },
+  { code: 'MC', nom: 'Monaco',             flag: '🇲🇨', ind: '377', dev: '€',    trunk: false, nsn: 8,  zone: 'Europe francophone' },
+  { code: 'CH', nom: 'Suisse',             flag: '🇨🇭', ind: '41',  dev: 'CHF',  trunk: true,  nsn: 9,  zone: 'Europe francophone' },
+  /* ── Amérique du Nord ───────────────────────────────────────── */
+  { code: 'CA', nom: 'Canada / États-Unis', flag: '🇨🇦', ind: '1',  dev: '$',    trunk: false, nsn: 10, zone: 'Amérique du Nord' }
 ];
+
+/* Devises proposées dans le sélecteur (remplies automatiquement
+   quand on choisit un pays, mais modifiables à la main). */
+var DEVISES_REF = [
+  { v: '€',    l: '€ Euro' },
+  { v: 'FCFA', l: 'FCFA (XOF / XAF)' },
+  { v: '$',    l: '$ Dollar' },
+  { v: 'CHF',  l: 'CHF Franc suisse' },
+  { v: 'DH',   l: 'DH Dirham marocain' },
+  { v: 'DA',   l: 'DA Dinar algérien' },
+  { v: 'DT',   l: 'DT Dinar tunisien' },
+  { v: 'KMF',  l: 'KMF Franc comorien' },
+  { v: 'FC',   l: 'FC Franc congolais' },
+  { v: 'GNF',  l: 'GNF Franc guinéen' },
+  { v: 'Ar',   l: 'Ar Ariary malgache' },
+  { v: 'Rs',   l: 'Rs Roupie mauricienne' },
+  { v: 'MRU',  l: 'MRU Ouguiya' },
+  { v: 'FBu',  l: 'FBu Franc burundais' },
+  { v: 'RWF',  l: 'RWF Franc rwandais' },
+  { v: 'SCR',  l: 'SCR Roupie seychelloise' },
+  { v: 'FDJ',  l: 'FDJ Franc djiboutien' }
+];
+
+function paysDeCode(c) {
+  for (var i = 0; i < PAYS_REF.length; i++) if (PAYS_REF[i].code === c) return PAYS_REF[i];
+  return null;
+}
+function codePaysDeIndicatif(ind) {
+  ind = String(ind || '').replace(/[^0-9]/g, '');
+  for (var i = 0; i < PAYS_REF.length; i++) if (PAYS_REF[i].ind === ind) return PAYS_REF[i].code;
+  return 'CI';
+}
+
+/* Remplit les listes Pays / Indicatif / Devise (Paramètres + assistant). */
+function remplirSelectsPays() {
+  var hPays = '', hInd = '', zone = null, i, p;
+  for (i = 0; i < PAYS_REF.length; i++) {
+    p = PAYS_REF[i];
+    if (p.zone !== zone) {
+      if (zone !== null) { hPays += '</optgroup>'; hInd += '</optgroup>'; }
+      hPays += '<optgroup label="' + p.zone + '">';
+      hInd  += '<optgroup label="' + p.zone + '">';
+      zone = p.zone;
+    }
+    hPays += '<option value="' + p.code + '">' + p.flag + ' ' + p.nom + '</option>';
+    hInd  += '<option value="' + p.ind + '">' + p.flag + ' ' + p.nom + ' (+' + p.ind + ')</option>';
+  }
+  if (zone !== null) { hPays += '</optgroup>'; hInd += '</optgroup>'; }
+
+  var hDev = '';
+  for (i = 0; i < DEVISES_REF.length; i++) hDev += '<option value="' + DEVISES_REF[i].v + '">' + DEVISES_REF[i].l + '</option>';
+
+  var poser = function (id, html) {
+    var el = ge(id);
+    if (el && el.getAttribute('data-rempli') !== '1') { el.innerHTML = html; el.setAttribute('data-rempli', '1'); }
+  };
+  poser('setPays', hPays);   poser('wizPays', hPays);
+  poser('setIndicatif', hInd);
+  poser('setDevise', hDev);  poser('wizDevise', hDev);
+}
+
+/* Choix d'un pays → devise et indicatif remplis automatiquement. */
+function appliquerPays(code, idDevise, idIndicatif) {
+  var p = paysDeCode(code);
+  if (!p) return;
+  if (idDevise && ge(idDevise)) ge(idDevise).value = p.dev;
+  if (idIndicatif && ge(idIndicatif)) ge(idIndicatif).value = p.ind;
+}
+
+/* Table utilisée par la validation des numéros — dérivée de PAYS_REF. */
+var PAYS_TEL = (function () {
+  var t = [];
+  for (var i = 0; i < PAYS_REF.length; i++) {
+    var p = PAYS_REF[i];
+    t.push({ ind: p.ind, nom: p.nom, trunk: p.trunk, nsn: p.nsn });
+  }
+  return t;
+})();
 
 /* Indicatif du pressing, réglé dans Paramètres. 225 par défaut. */
 function indicatifPays() {
@@ -4359,6 +4457,11 @@ function renderParametres() {
   ge('setNom').value = s.name || '';
   ge('setTel').value = s.tel || '';
   ge('setAdresse').value = s.adresse || '';
+  remplirSelectsPays();
+  if (ge('setPays')) {
+    ge('setPays').value = s.pays || codePaysDeIndicatif(s.indicatif || '225');
+    ge('setPays').onchange = function () { appliquerPays(this.value, 'setDevise', 'setIndicatif'); };
+  }
   ge('setDevise').value = s.devise || '€';
   if (ge('setIndicatif')) ge('setIndicatif').value = s.indicatif || '225';
   ge('setTva').value = (s.tva == null ? 20 : s.tva);
@@ -4388,6 +4491,7 @@ function renderParametres() {
     d2.settings.name = ge('setNom').value.trim() || 'Mon Pressing';
     d2.settings.tel = ge('setTel').value.trim();
     d2.settings.adresse = ge('setAdresse').value.trim();
+    if (ge('setPays')) d2.settings.pays = ge('setPays').value;
     d2.settings.devise = ge('setDevise').value;
     if (ge('setIndicatif')) d2.settings.indicatif = ge('setIndicatif').value;
     d2.settings.tva = numVal('setTva', 20);
@@ -4621,6 +4725,7 @@ function loadDemoAfrique() {
   d.settings.tel = '27 21 00 00 00';
   d.settings.devise = 'FCFA';
   d.settings.indicatif = '225';
+  d.settings.pays = 'CI';
   d.settings.tva = 0;
   d.settings.delaiStandard = 2;
   d.settings.expressMult = 2;
@@ -4829,6 +4934,7 @@ function loadDemoData() {
   d.settings.slogan = 'Du dépôt au retrait, sans rien oublier';
   d.settings.devise = '€';
   d.settings.indicatif = '33';
+  d.settings.pays = 'FR';
   d.settings.tva = 20;
   d.settings.emplacementActif = true;
   d.settings.categories = ['Vêtements homme', 'Vêtements femme', 'Linge maison', 'Cuir & spécial'];
@@ -5068,6 +5174,13 @@ function boot() {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+  remplirSelectsPays();
+  if (ge('wizPays')) {
+    ge('wizPays').value = 'CI';
+    appliquerPays('CI', 'wizDevise', null);
+    ge('wizPays').onchange = function () { appliquerPays(this.value, 'wizDevise', null); };
+  }
+
   // Import direct d'une sauvegarde JSON existante depuis l'écran de bienvenue
   // (pour les anciens clients hors-ligne qui migrent vers le SaaS).
   var linkImp = ge('linkImportExisting'), fileImp = ge('fileImportExisting');
