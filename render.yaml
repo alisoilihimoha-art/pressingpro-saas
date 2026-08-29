@@ -1,0 +1,14 @@
+# Configuration automatique pour Render (https://render.com).
+# Quand ce dépôt est importé sur Render via "New +" > "Blueprint",
+# Render lit ce fichier et configure tout automatiquement : pas besoin
+# de remplir manuellement les champs de configuration.
+services:
+  - type: web
+    name: pressingpro-saas
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: PRESSINGPRO_JWT_SECRET
+        generateValue: true
