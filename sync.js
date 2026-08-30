@@ -81,6 +81,17 @@
     return api('/api/import', 'POST', { data: data });
   };
 
+  // ── Abonnement PressingPro Cloud (Stripe) ────────────────────────
+  PP.createCheckoutSession = function () {
+    return api('/api/billing/create-checkout-session', 'POST');
+  };
+  PP.getBillingStatus = function () {
+    return api('/api/billing/status', 'GET');
+  };
+  PP.openBillingPortal = function () {
+    return api('/api/billing/portal', 'POST');
+  };
+
   // ── Synchronisation en arrière-plan (débouncée) ──────────────────
   var pendingPush = null, pushTimer = null, pushing = false;
 

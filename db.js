@@ -36,6 +36,22 @@ async function init() {
       updated_at TEXT NOT NULL
     )
   `);
+
+  // Colonnes liées à l'abonnement Stripe, ajoutées après coup : on les
+  // crée avec ALTER TABLE si elles n'existent pas encore (ignore
+  // l'erreur "duplicate column" si elles sont déjà là).
+  await safeAlter(`ALTER TABLE tenants ADD COLUMN stripe_customer_id TEXT`);
+  await safeAlter(`ALTER TABLE tenants ADD COLUMN stripe_subscription_id TEXT`);
+  await safeAlter(`ALTER TABLE tenants ADD COLUMN subscription_status TEXT DEFAULT 'none'`);
+  await safeAlter(`ALTER TABLE tenants ADD COLUMN current_period_end TEXT`);
+}
+
+async function safeAlter(sql) {
+  try {
+    await db.execute(sql);
+  } catch (e) {
+    // Colonne déjà existante (ou autre no-op) : on ignore.
+  }
 }
 
 module.exports = { db, init };

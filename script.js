@@ -4492,6 +4492,47 @@ function renderParametres() {
       }
     };
   }
+  // Abonnement PressingPro Cloud (Stripe)
+  if (ge('btnSubscribe')) {
+    ge('btnSubscribe').onclick = function () {
+      var btn = ge('btnSubscribe');
+      btn.disabled = true;
+      btn.textContent = 'Redirection…';
+      PPSync.createCheckoutSession().then(function (res) {
+        if (res && res.url) { window.location.href = res.url; }
+      }).catch(function (e) {
+        toast('❌ ' + (e.message || "Erreur lors de la connexion à Stripe"), 'err');
+        btn.disabled = false;
+        btn.textContent = "💳 S'abonner — 20€/mois";
+      });
+    };
+  }
+  if (ge('btnManageBilling')) {
+    ge('btnManageBilling').onclick = function () {
+      PPSync.openBillingPortal().then(function (res) {
+        if (res && res.url) { window.location.href = res.url; }
+      }).catch(function (e) { toast('❌ ' + (e.message || 'Erreur'), 'err'); });
+    };
+  }
+  if (ge('billingInfoBox') && window.PPSync && PPSync.isLoggedIn()) {
+    PPSync.getBillingStatus().then(function (b) {
+      var box = ge('billingInfoBox');
+      var active = b.subscriptionStatus === 'active' || b.subscriptionStatus === 'trialing';
+      if (active) {
+        box.style.background = 'var(--ok-bg)'; box.style.borderColor = 'var(--ok)'; box.style.color = '#065f46';
+        box.innerHTML = '✅ Abonnement actif' + (b.currentPeriodEnd ? ' — prochain renouvellement le ' + new Date(b.currentPeriodEnd).toLocaleDateString('fr-FR') : '');
+        if (ge('btnManageBilling')) ge('btnManageBilling').style.display = '';
+        if (ge('btnSubscribe')) ge('btnSubscribe').style.display = 'none';
+      } else {
+        box.style.background = ''; box.style.borderColor = 'var(--bdr)'; box.style.color = '';
+        box.innerHTML = '⏳ Pas encore abonné (plan actuel : ' + escapeHtml(b.plan || 'essai') + ')';
+        if (ge('btnSubscribe')) ge('btnSubscribe').style.display = '';
+        if (ge('btnManageBilling')) ge('btnManageBilling').style.display = 'none';
+      }
+    }).catch(function () {
+      ge('billingInfoBox').textContent = "Impossible de récupérer le statut de l'abonnement.";
+    });
+  }
   ge('formCommerce').onsubmit = function (e) {
     e.preventDefault();
     var d2 = getData();
@@ -5181,6 +5222,17 @@ function boot() {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+  // Retour depuis Stripe Checkout (paiement de l'abonnement Cloud)
+  try {
+    var qp = new URLSearchParams(window.location.search);
+    if (qp.get('billing') === 'success') {
+      toast('✅ Abonnement activé — merci !', 'ok');
+      history.replaceState(null, '', window.location.pathname);
+    } else if (qp.get('billing') === 'cancel') {
+      toast('Paiement annulé', 'err');
+      history.replaceState(null, '', window.location.pathname);
+    }
+  } catch (e) {}
   remplirSelectsPays();
   if (ge('wizPays')) {
     ge('wizPays').value = 'CI';

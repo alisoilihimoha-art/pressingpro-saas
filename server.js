@@ -18,6 +18,50 @@ const { db, init } = require('./db');
 
 const app = express();
 app.use(cors());
+
+// ── Stripe (abonnement PressingPro Cloud) ────────────────────────
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
+const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID || '';
+const APP_BASE_URL = process.env.APP_BASE_URL || 'https://pressingpro.mas-datasolution.fr';
+const stripe = STRIPE_SECRET_KEY ? require('stripe')(STRIPE_SECRET_KEY) : null;
+
+// Le webhook Stripe a besoin du corps BRUT (non parsé en JSON) pour
+// vérifier la signature ; on l'enregistre donc AVANT express.json().
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!stripe || !STRIPE_WEBHOOK_SECRET) return res.status(500).send('Webhook non configuré');
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], STRIPE_WEBHOOK_SECRET);
+  } catch (e) {
+    console.error('Signature webhook Stripe invalide :', e.message);
+    return res.status(400).send(`Webhook Error: ${e.message}`);
+  }
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const tenantId = session.metadata && session.metadata.tenantId;
+      if (tenantId) {
+        await db.execute({
+          sql: `UPDATE tenants SET subscription_status = 'active', stripe_subscription_id = ?, plan = 'cloud' WHERE id = ?`,
+          args: [session.subscription || null, tenantId]
+        });
+      }
+    } else if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
+      const sub = event.data.object;
+      const periodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null;
+      await db.execute({
+        sql: `UPDATE tenants SET subscription_status = ?, current_period_end = ? WHERE stripe_subscription_id = ?`,
+        args: [sub.status, periodEnd, sub.id]
+      });
+    }
+    return res.json({ received: true });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).send('Erreur serveur webhook');
+  }
+});
+
 app.use(express.json({ limit: '15mb' })); // le blob JSON complet peut être volumineux
 
 // Sert le frontend (index.html/script.js/style.css/sync.js) depuis le même
@@ -155,6 +199,76 @@ app.post('/api/import', authRequired, async (req, res) => {
       args: [req.tenantId, JSON.stringify(data), updatedAt]
     });
     return res.json({ ok: true, updatedAt });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// ── Abonnement PressingPro Cloud (Stripe) ────────────────────────
+app.post('/api/billing/create-checkout-session', authRequired, async (req, res) => {
+  try {
+    if (!stripe || !STRIPE_PRICE_ID) return res.status(500).json({ error: 'Paiement non configuré côté serveur' });
+    const result = await db.execute({ sql: 'SELECT * FROM tenants WHERE id = ?', args: [req.tenantId] });
+    const tenant = result.rows[0];
+    if (!tenant) return res.status(404).json({ error: 'Compte introuvable' });
+
+    let customerId = tenant.stripe_customer_id;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: tenant.email,
+        name: tenant.business_name,
+        metadata: { tenantId: tenant.id }
+      });
+      customerId = customer.id;
+      await db.execute({ sql: 'UPDATE tenants SET stripe_customer_id = ? WHERE id = ?', args: [customerId, tenant.id] });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      customer: customerId,
+      line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
+      success_url: `${APP_BASE_URL}/?billing=success`,
+      cancel_url: `${APP_BASE_URL}/?billing=cancel`,
+      metadata: { tenantId: tenant.id }
+    });
+    return res.json({ url: session.url });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'Erreur lors de la création du paiement' });
+  }
+});
+
+app.get('/api/billing/status', authRequired, async (req, res) => {
+  try {
+    const result = await db.execute({
+      sql: 'SELECT plan, subscription_status, current_period_end FROM tenants WHERE id = ?',
+      args: [req.tenantId]
+    });
+    const tenant = result.rows[0];
+    if (!tenant) return res.status(404).json({ error: 'Compte introuvable' });
+    return res.json({
+      plan: tenant.plan,
+      subscriptionStatus: tenant.subscription_status,
+      currentPeriodEnd: tenant.current_period_end
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+app.post('/api/billing/portal', authRequired, async (req, res) => {
+  try {
+    if (!stripe) return res.status(500).json({ error: 'Paiement non configuré côté serveur' });
+    const result = await db.execute({ sql: 'SELECT stripe_customer_id FROM tenants WHERE id = ?', args: [req.tenantId] });
+    const tenant = result.rows[0];
+    if (!tenant || !tenant.stripe_customer_id) return res.status(400).json({ error: 'Aucun abonnement Stripe pour ce compte' });
+    const portal = await stripe.billingPortal.sessions.create({
+      customer: tenant.stripe_customer_id,
+      return_url: `${APP_BASE_URL}/`
+    });
+    return res.json({ url: portal.url });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: 'Erreur serveur' });
