@@ -4525,7 +4525,18 @@ function renderParametres() {
         if (ge('btnSubscribe')) ge('btnSubscribe').style.display = 'none';
       } else {
         box.style.background = ''; box.style.borderColor = 'var(--bdr)'; box.style.color = '';
-        box.innerHTML = '⏳ Pas encore abonné (plan actuel : ' + escapeHtml(b.plan || 'essai') + ')';
+        var joursRestants = null;
+        if (b.trialEndsAt) {
+          joursRestants = Math.ceil((new Date(b.trialEndsAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+        }
+        if (joursRestants !== null && joursRestants > 0) {
+          box.innerHTML = '⏳ Essai gratuit — encore ' + joursRestants + ' jour' + (joursRestants > 1 ? 's' : '') + ' avant abonnement obligatoire';
+        } else if (joursRestants !== null) {
+          box.style.background = 'var(--err-bg)'; box.style.borderColor = 'var(--err)'; box.style.color = '#991b1b';
+          box.innerHTML = '⛔ Essai gratuit terminé — abonnez-vous pour continuer';
+        } else {
+          box.innerHTML = '⏳ Pas encore abonné (plan actuel : ' + escapeHtml(b.plan || 'essai') + ')';
+        }
         if (ge('btnSubscribe')) ge('btnSubscribe').style.display = '';
         if (ge('btnManageBilling')) ge('btnManageBilling').style.display = 'none';
       }
@@ -5205,7 +5216,11 @@ function boot() {
       initApp();
       checkAccessGate();
     }
-  }).catch(function () {
+  }).catch(function (err) {
+    if (err && err.code === 'subscription_required') {
+      showTrialExpiredGate();
+      return;
+    }
     // Serveur injoignable au démarrage : on retombe sur le cache local
     // s'il existe (l'app reste utilisable hors-ligne), sinon on bloque
     // sur l'écran de connexion.
@@ -5219,6 +5234,33 @@ function boot() {
       toast('Impossible de joindre le serveur pour le moment.', 'err');
     }
   });
+}
+
+// Bloque l'accès quand l'essai gratuit de 14 jours est terminé et qu'aucun
+// abonnement n'est actif (le serveur renvoie code: 'subscription_required').
+function showTrialExpiredGate() {
+  ge('accountOverlay').classList.add('hidden');
+  ge('welcomeOverlay').classList.add('hidden');
+  ge('trialExpiredOverlay').classList.remove('hidden');
+  if (ge('btnSubscribeGate')) {
+    ge('btnSubscribeGate').onclick = function () {
+      var btn = ge('btnSubscribeGate');
+      btn.disabled = true;
+      btn.textContent = 'Redirection…';
+      PPSync.createCheckoutSession().then(function (res) {
+        if (res && res.url) { window.location.href = res.url; }
+      }).catch(function (e) {
+        ge('trialExpiredErr').textContent = '❌ ' + (e.message || 'Erreur lors de la connexion à Stripe');
+        btn.disabled = false;
+        btn.textContent = "💳 S'abonner — 20€/mois";
+      });
+    };
+  }
+  if (ge('btnLogoutFromGate')) {
+    ge('btnLogoutFromGate').onclick = function () {
+      if (window.PPSync) PPSync.logout();
+    };
+  }
 }
 
 document.addEventListener('DOMContentLoaded', function () {

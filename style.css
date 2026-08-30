@@ -51,6 +51,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--t1);display:flex;m
 /* LICENCE */
 #accountOverlay{position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#0c4a6e 0%,#075985 50%,#0ea5e9 100%);display:flex;align-items:center;justify-content:center}
 #accountOverlay.hidden{display:none}
+#trialExpiredOverlay{position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#7c2d12 0%,#9a3412 50%,#ea580c 100%);display:flex;align-items:center;justify-content:center}
+#trialExpiredOverlay.hidden{display:none}
 .pp-tabs{display:flex;gap:8px;margin-bottom:20px;border-bottom:1px solid #e2e8f0}
 .pp-tab{flex:1;background:none;border:none;padding:10px 6px;font-weight:700;color:#94a3b8;cursor:pointer;border-bottom:2px solid transparent}
 .pp-tab.active{color:#0ea5e9;border-bottom-color:#0ea5e9}

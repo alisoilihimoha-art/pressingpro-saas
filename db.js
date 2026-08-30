@@ -44,6 +44,16 @@ async function init() {
   await safeAlter(`ALTER TABLE tenants ADD COLUMN stripe_subscription_id TEXT`);
   await safeAlter(`ALTER TABLE tenants ADD COLUMN subscription_status TEXT DEFAULT 'none'`);
   await safeAlter(`ALTER TABLE tenants ADD COLUMN current_period_end TEXT`);
+  await safeAlter(`ALTER TABLE tenants ADD COLUMN trial_ends_at TEXT`);
+
+  // Comptes déjà créés avant l'ajout de l'essai gratuit : on leur donne
+  // 14 jours à partir de leur date de création, pour ne pas les bloquer
+  // immédiatement au prochain déploiement.
+  try {
+    await db.execute(`UPDATE tenants SET trial_ends_at = datetime(created_at, '+14 days') WHERE trial_ends_at IS NULL`);
+  } catch (e) {
+    console.error("Impossible d'initialiser trial_ends_at pour les comptes existants :", e);
+  }
 }
 
 async function safeAlter(sql) {

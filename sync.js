@@ -38,7 +38,12 @@
       body: body !== undefined ? JSON.stringify(body) : undefined
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (json) {
-        if (!r.ok) throw new Error(json.error || ('Erreur réseau (' + r.status + ')'));
+        if (!r.ok) {
+          var err = new Error(json.error || ('Erreur réseau (' + r.status + ')'));
+          err.status = r.status;
+          err.code = json.code;
+          throw err;
+        }
         return json;
       });
     });

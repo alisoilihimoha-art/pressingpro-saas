@@ -115,9 +115,11 @@ app.post('/api/auth/signup', async (req, res) => {
     const id = uid();
     const passwordHash = bcrypt.hashSync(password, 10);
     const createdAt = now();
+    // 14 jours d'essai gratuit avant qu'un abonnement soit obligatoire.
+    const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
     await db.execute({
-      sql: 'INSERT INTO tenants (id, business_name, email, password_hash, plan, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-      args: [id, businessName, emailLower, passwordHash, 'trial', createdAt]
+      sql: 'INSERT INTO tenants (id, business_name, email, password_hash, plan, created_at, trial_ends_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      args: [id, businessName, emailLower, passwordHash, 'trial', createdAt, trialEndsAt]
     });
 
     // Le blob de données démarre vide ; le frontend appliquera sa propre
@@ -153,8 +155,37 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// ── Vérifie que le compte a un abonnement actif OU un essai gratuit
+//    encore valide, avant d'autoriser l'accès aux données du pressing.
+function hasActiveAccess(tenant) {
+  const subActive = tenant.subscription_status === 'active' || tenant.subscription_status === 'trialing';
+  const trialActive = !!tenant.trial_ends_at && new Date(tenant.trial_ends_at).getTime() > Date.now();
+  return subActive || trialActive;
+}
+
+async function requireActiveAccess(req, res, next) {
+  try {
+    const result = await db.execute({
+      sql: 'SELECT subscription_status, trial_ends_at FROM tenants WHERE id = ?',
+      args: [req.tenantId]
+    });
+    const tenant = result.rows[0];
+    if (!tenant) return res.status(404).json({ error: 'Compte introuvable' });
+    if (!hasActiveAccess(tenant)) {
+      return res.status(402).json({
+        error: "Votre essai gratuit est terminé. Abonnez-vous pour continuer à utiliser PressingPro Cloud.",
+        code: 'subscription_required'
+      });
+    }
+    return next();
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'Erreur serveur' });
+  }
+}
+
 // ── Données : lecture ─────────────────────────────────────────────
-app.get('/api/data', authRequired, async (req, res) => {
+app.get('/api/data', authRequired, requireActiveAccess, async (req, res) => {
   try {
     const result = await db.execute({
       sql: 'SELECT json_blob, updated_at FROM tenant_data WHERE tenant_id = ?',
@@ -170,7 +201,7 @@ app.get('/api/data', authRequired, async (req, res) => {
 });
 
 // ── Données : écriture (sync depuis le navigateur) ────────────────
-app.put('/api/data', authRequired, async (req, res) => {
+app.put('/api/data', authRequired, requireActiveAccess, async (req, res) => {
   try {
     const { data } = req.body || {};
     if (data === undefined) return res.status(400).json({ error: 'Champ data manquant' });
@@ -188,7 +219,7 @@ app.put('/api/data', authRequired, async (req, res) => {
 });
 
 // ── Import d'une sauvegarde JSON existante (migration offline -> SaaS) ──
-app.post('/api/import', authRequired, async (req, res) => {
+app.post('/api/import', authRequired, requireActiveAccess, async (req, res) => {
   try {
     const { data } = req.body || {};
     if (!data || typeof data !== 'object') return res.status(400).json({ error: 'Fichier JSON invalide' });
@@ -242,7 +273,7 @@ app.post('/api/billing/create-checkout-session', authRequired, async (req, res) 
 app.get('/api/billing/status', authRequired, async (req, res) => {
   try {
     const result = await db.execute({
-      sql: 'SELECT plan, subscription_status, current_period_end FROM tenants WHERE id = ?',
+      sql: 'SELECT plan, subscription_status, current_period_end, trial_ends_at FROM tenants WHERE id = ?',
       args: [req.tenantId]
     });
     const tenant = result.rows[0];
@@ -250,7 +281,9 @@ app.get('/api/billing/status', authRequired, async (req, res) => {
     return res.json({
       plan: tenant.plan,
       subscriptionStatus: tenant.subscription_status,
-      currentPeriodEnd: tenant.current_period_end
+      currentPeriodEnd: tenant.current_period_end,
+      trialEndsAt: tenant.trial_ends_at,
+      accessActive: hasActiveAccess(tenant)
     });
   } catch (e) {
     console.error(e);
